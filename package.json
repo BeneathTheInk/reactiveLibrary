@@ -1,13 +1,12 @@
 {
 	"name": "dee",
-	"version": "0.2.1",
-	"private": true,
+	"version": "0.2.2",
 	"scripts": {
 		"test": "node ./test/server"
 	},
 	"main": "./lib/d.js",
 	"dependencies": {
-		"underscore": "1.4.4",
+		"underscore": "1.5.1",
 		"uuid": "1.4.1",
 		"backbone": "1.0.0"
 	},
