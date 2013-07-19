@@ -39,23 +39,21 @@ d.subs =
 				data: data
 				contexts: []
 			
+			_.extend sub, Backbone.Events # eventful
 			_.extend sub, ext
-			_.defaults sub, _.pick d, [ "subscribe", "unsubscribe" ]
 			
-			subscribe = ext.subscribe or d.subscribe
-			unsubscribe = ext.unsubscribe or d.unsubscribe
-
-			sub.subscribe = (ctx, options) ->
-				subscribe.apply @, arguments
+			sub.add = (ctx, options) ->
 				@contexts.push ctx
 				
 				if ext.temporary
-					onstop = () => d.subs.remove @id
-					ctx.on "stop", onstop
-					ctx.on "run:before", onstop
+					onstop = () =>
+						d.subs.remove @id
+						@stopListening ctx # clean up events
+					
+					@listenTo ctx, "stop", onstop
+					@listenTo ctx, "run:before", onstop
 
-			sub.unsubscribe = (ctx, options) ->
-				unsubscribe.apply @, arguments
+			sub.remove = (ctx, options) ->
 				@contexts = _.without @contexts, ctx
 
 			@subscriptions.push sub
@@ -63,10 +61,10 @@ d.subs =
 		else unless _.isEqual data, sub.data
 			ctxs = sub.contexts
 
-			_.each ctxs, (ctx) -> sub.unsubscribe ctx # unsubscribe from current data
+			_.each ctxs, (ctx) -> ctx.unsubscribe sub # unsubscribe from current data
 			sub.contexts = []
 			sub.data = data # Set current data
-			_.each ctxs, (ctx) -> sub.subscribe ctx # resubscribe to new data
+			_.each ctxs, (ctx) -> ctx.subscribe sub # resubscribe to new data
 		
 		@queue.push sub
 		return sub
@@ -79,7 +77,7 @@ d.subs =
 # `d.subs.remove()` completely removes a subscription from existence. All subscribed contexts are unsubscribed. 
 	remove: (id) ->
 		return unless sub = @find id
-		_.each sub.contexts, (ctx) -> sub.unsubscribe ctx
+		_.each sub.contexts, (ctx) -> ctx.unsubscribe sub
 		index = _.indexOf @subscriptions, sub
 		@subscriptions.splice index, 1
 	
@@ -102,7 +100,7 @@ d.get = (path, options = {}) ->
 	if options.reactive isnt false and ctx # subscribe path to ctx
 		d.subs.clear() # we need a clean space
 		@process val, parts, options # process path into subscription
-		_.each d.subs.queue, (sub) -> ctx.subscribe sub # start subscription
+		_.each d.subs.queue, (sub) -> ctx.subscribe sub, options # start subscription
 		d.subs.clear() # clean again
 
 	return if val? then val else options.default
@@ -125,6 +123,7 @@ d.reactive = (fn, options = {}) ->
 
 	rfn = () ->
 		if rfn.running then return
+		rfn.running = true
 
 		parent = self.current # cache the parent
 		self.current = rfn # set the ctx
@@ -134,25 +133,25 @@ d.reactive = (fn, options = {}) ->
 
 			onstop = () ->
 				rfn.parents = _.without rfn.parents, parent.id
+				rfn.stopListening parent # clean up stop events
 				unless rfn.parents.length or rfn.root then rfn.stop()
 
-			parent.on "stop", onstop
-			parent.on "run:before", onstop
+			rfn.listenTo parent, "stop", onstop
+			rfn.listenTo parent, "run:before", onstop
 
 			rfn.trigger "start"
 		
 		unless parent then rfn.root = true # make sure we don't stop suddenly
 		
 		rfn.trigger "run:before" # pre run
-		rfn.running = true
 
 		fn.call rfn # run
 
 		rfn.trigger "run" # post run
-		rfn.running = false
 		rfn.trigger "run:after"
 
 		self.current = parent # reset the ctx
+		rfn.running = false
 
 # The context also triggers events using Backbone's event API. These events include `start`, `run:before`, `run`, `run:after`, and `stop`.
 	_.extend rfn, Backbone.Events # eventful
@@ -162,15 +161,21 @@ d.reactive = (fn, options = {}) ->
 	rfn.path = options.path # base path
 
 # Each context defines a `subscribe()` and `unsubscribe()` method. These methods take a subscription and watch (or unwatch) for changes to data. Given the same arguments, `unsubscribe()` should "undo" anything done by `subscribe()`. Each subscription will only be subscribed to once.
-	rfn.subscribe = (sub, options = {}) ->
+	rfn.subscribe = (sub, o = {}) ->
 		return if _.contains @subscriptions, sub.id
-		sub.subscribe @, options # enable the subscription
+		subscribe = options.subscribe or d.subscribe
+
+		sub.add @, o # tell the subscription about us
+		subscribe.call sub, @, o # enable the subscription
 		@subscriptions.push sub.id
 
-	rfn.unsubscribe = (sub, options = {}) ->
+	rfn.unsubscribe = (sub, o = {}) ->
 		if _.isString(sub) then sub = self.subs.find sub
 		return unless _.contains @subscriptions, sub.id
-		sub.unsubscribe @, options
+		unsubscribe = options.unsubscribe or d.unsubscribe
+		
+		sub.remove @, o
+		unsubscribe.call sub, @, o # disable subscription
 		@subscriptions = _.without @subscriptions, sub.id
 
 # Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.
@@ -269,8 +274,7 @@ d.process = (value, parts, options = {}) ->
 		else base += "." + part
 
 	flush = () =>
-		#if subpath.length then add subpath[0] # backbone isnt deep, we only want the first one
-		@subs.create base, obj, options
+		@subs.create base, obj
 		_.each subpath, add
 		subpath = []
 
@@ -288,11 +292,8 @@ d.process = (value, parts, options = {}) ->
 # `d.subscribe()` is the default subscribe method used by subscriptions. `this` within the method will refer to the subscription using it. By passing `fn`, this method should set the proper events to call the context any time it needs to update.
 d.subscribe = (fn, options = {}) ->
 	data = @data
-	#subpath = @data.subpath
-
-	#if _.isEqual(data, d.model) and !subpath then return
+	
 	if data instanceof Backbone.Model
-		#attr = if subpath then ":" + subpath else ""
 		fn.listenTo data, "change", fn
 	else if data instanceof Backbone.Collection
 		fn.listenTo data, "add", fn
@@ -301,11 +302,7 @@ d.subscribe = (fn, options = {}) ->
 
 # `d.unsubscribe()` is the default unsubscribe method used by subscriptions. It is called in the same fashion as `d.subscribe()`. Given the same arguments, it should completely reverse anything done by the subscribe method.
 d.unsubscribe = (fn, options = {}) ->
-	data = @data
-	#subpath = @data.subpath
-
-	#if _.isEqual(data, d.model) and !subpath then return
-	if d._isBackboneData(data) then fn.stopListening data
+	if d._isBackboneData(@data) then fn.stopListening @data
 
 # Helpers
 # ----------------
