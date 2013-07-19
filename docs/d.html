@@ -596,9 +596,23 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 		<span class="keyword">if</span> _.isEmpty(base) <span class="keyword">then</span> base = part
 		<span class="keyword">else</span> base += <span class="string">"."</span> + part
 
-	flush = () =&gt;
-		<span class="keyword">if</span> subpath.length <span class="keyword">then</span> add subpath[<span class="number">0</span>] <span class="comment"># backbone isnt deep, we only want the first one</span>
-		<span class="property">@subs</span>.create base, { obj: obj, subpath: subpath[<span class="number">0</span>] <span class="keyword">or</span> <span class="literal">null</span> }, options
+	flush = () =&gt;</pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-29">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-29">&#182;</a>
+							</div>
+							<p>if subpath.length then add subpath[0] # backbone isnt deep, we only want the first one</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>		<span class="property">@subs</span>.create base, obj, options
+		_.each subpath, add
 		subpath = []
 
 	_.each parts, (p) =&gt;
@@ -615,48 +629,18 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-29">
-						<div class="annotation">
-							
-							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-29">&#182;</a>
-							</div>
-							<p><code>d.subscribe()</code> is the default subscribe method used by subscriptions. <code>this</code> within the method will refer to the subscription using it. By passing <code>fn</code>, this method should set the proper events to call the context any time it needs to update.</p>
-
-						</div>
-						
-						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">subscribe</span></span> = (fn, options = {}) -&gt;
-	data = <span class="property">@data</span>.obj
-	subpath = <span class="property">@data</span>.subpath
-
-	<span class="keyword">if</span> _.isEqual(data, d.model) <span class="keyword">and</span> !subpath <span class="keyword">then</span> <span class="keyword">return</span>
-	<span class="keyword">else</span> <span class="keyword">if</span> data <span class="keyword">instanceof</span> Backbone.Model
-		attr = <span class="keyword">if</span> subpath <span class="keyword">then</span> <span class="string">":"</span> + subpath <span class="keyword">else</span> <span class="string">""</span>
-		fn.listenTo data, <span class="string">"change"</span>+attr, fn
-	<span class="keyword">else</span> <span class="keyword">if</span> data <span class="keyword">instanceof</span> Backbone.Collection
-		fn.listenTo data, <span class="string">"add"</span>, fn
-		fn.listenTo data, <span class="string">"remove"</span>, fn
-		fn.listenTo data, <span class="string">"sort"</span>, fn</pre></div></div>
-						
-				</li>
-				
-				
 				<li id="section-30">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
 								<a class="pilcrow" href="#section-30">&#182;</a>
 							</div>
-							<p><code>d.unsubscribe()</code> is the default unsubscribe method used by subscriptions. It is called in the same fashion as <code>d.subscribe()</code>. Given the same arguments, it should completely reverse anything done by the subscribe method.</p>
+							<p><code>d.subscribe()</code> is the default subscribe method used by subscriptions. <code>this</code> within the method will refer to the subscription using it. By passing <code>fn</code>, this method should set the proper events to call the context any time it needs to update.</p>
 
 						</div>
 						
-						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">unsubscribe</span></span> = (fn, options = {}) -&gt;
-	data = <span class="property">@data</span>.obj
-	subpath = <span class="property">@data</span>.subpath
-
-	<span class="keyword">if</span> _.isEqual(data, d.model) <span class="keyword">and</span> !subpath <span class="keyword">then</span> <span class="keyword">return</span>
-	<span class="keyword">else</span> <span class="keyword">if</span> d._isBackboneData(data) <span class="keyword">then</span> fn.stopListening data</pre></div></div>
+						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">subscribe</span></span> = (fn, options = {}) -&gt;
+	data = <span class="property">@data</span></pre></div></div>
 						
 				</li>
 				
@@ -664,10 +648,10 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				<li id="section-31">
 						<div class="annotation">
 							
-							<div class="pilwrap for-h2">
+							<div class="pilwrap ">
 								<a class="pilcrow" href="#section-31">&#182;</a>
 							</div>
-							<h2>Helpers</h2>
+							<p>subpath = @data.subpath</p>
 
 						</div>
 						
@@ -679,6 +663,97 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 							
 							<div class="pilwrap ">
 								<a class="pilcrow" href="#section-32">&#182;</a>
+							</div>
+							<p>if _.isEqual(data, d.model) and !subpath then return</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>	<span class="keyword">if</span> data <span class="keyword">instanceof</span> Backbone.Model</pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-33">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-33">&#182;</a>
+							</div>
+							<p>attr = if subpath then &quot;:&quot; + subpath else &quot;&quot;</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>		fn.listenTo data, <span class="string">"change"</span>, fn
+	<span class="keyword">else</span> <span class="keyword">if</span> data <span class="keyword">instanceof</span> Backbone.Collection
+		fn.listenTo data, <span class="string">"add"</span>, fn
+		fn.listenTo data, <span class="string">"remove"</span>, fn
+		fn.listenTo data, <span class="string">"sort"</span>, fn</pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-34">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-34">&#182;</a>
+							</div>
+							<p><code>d.unsubscribe()</code> is the default unsubscribe method used by subscriptions. It is called in the same fashion as <code>d.subscribe()</code>. Given the same arguments, it should completely reverse anything done by the subscribe method.</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">unsubscribe</span></span> = (fn, options = {}) -&gt;
+	data = <span class="property">@data</span></pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-35">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-35">&#182;</a>
+							</div>
+							<p>subpath = @data.subpath</p>
+
+						</div>
+						
+				</li>
+				
+				
+				<li id="section-36">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-36">&#182;</a>
+							</div>
+							<p>if _.isEqual(data, d.model) and !subpath then return</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>	<span class="keyword">if</span> d._isBackboneData(data) <span class="keyword">then</span> fn.stopListening data</pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-37">
+						<div class="annotation">
+							
+							<div class="pilwrap for-h2">
+								<a class="pilcrow" href="#section-37">&#182;</a>
+							</div>
+							<h2>Helpers</h2>
+
+						</div>
+						
+				</li>
+				
+				
+				<li id="section-38">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-38">&#182;</a>
 							</div>
 							<p><code>d._parts()</code> takes a string <code>path</code> and divides it into an array of path parts. Optionally pass <code>base</code> to prefix it to path in the event <code>$</code> is not use.</p>
 
@@ -693,11 +768,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-33">
+				<li id="section-39">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-33">&#182;</a>
+								<a class="pilcrow" href="#section-39">&#182;</a>
 							</div>
 							<p><code>d._keysplit()</code> takes a string and separates it by <code>sep</code>. You can use <code>sep</code> in the path by prefixing it with <code>avoid</code>.</p>
 
@@ -721,11 +796,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-34">
+				<li id="section-40">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-34">&#182;</a>
+								<a class="pilcrow" href="#section-40">&#182;</a>
 							</div>
 							<p><code>d._deep()</code> gets or sets a <code>value</code> at <code>key</code> deeply within an object. When setting a <code>value</code> and <code>key</code> doesn&#39;t exist, objects are created to make it fit.</p>
 
@@ -754,11 +829,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-35">
+				<li id="section-41">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-35">&#182;</a>
+								<a class="pilcrow" href="#section-41">&#182;</a>
 							</div>
 							<p><code>d._trim()</code> normalizes a path by removing any leading or trailing separators.</p>
 
@@ -774,11 +849,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-36">
+				<li id="section-42">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-36">&#182;</a>
+								<a class="pilcrow" href="#section-42">&#182;</a>
 							</div>
 							<p><code>d._isBackboneData()</code> tests <code>obj</code> as a Backbone model or collection. Useful in determining if data can take events or needs to be accessed in a different way.</p>
 
