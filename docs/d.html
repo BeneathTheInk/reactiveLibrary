@@ -158,14 +158,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 			
 			sub.<span class="function"><span class="title">add</span></span> = (ctx, options) -&gt;
 				<span class="property">@contexts</span>.push ctx
-				
-				<span class="keyword">if</span> ext.temporary
-					onstop = () =&gt;
-						d.subs.remove <span class="property">@id</span>
-						<span class="property">@stopListening</span> ctx <span class="comment"># clean up events</span>
-					
-					<span class="property">@listenTo</span> ctx, <span class="string">"stop"</span>, onstop
-					<span class="property">@listenTo</span> ctx, <span class="string">"run:before"</span>, onstop
+				<span class="keyword">if</span> ext.temporary <span class="keyword">then</span> ctx.cleanup () =&gt; d.subs.remove <span class="property">@id</span>
 
 			sub.<span class="function"><span class="title">remove</span></span> = (ctx, options) -&gt;
 				<span class="property">@contexts</span> = _.without <span class="property">@contexts</span>, ctx
@@ -318,15 +311,22 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 		self.current = rfn <span class="comment"># set the ctx</span>
 
 		<span class="keyword">if</span> rfn.first_run
-			rfn.parent = old <span class="comment"># cache parent on context creation</span>
-			
-			<span class="keyword">if</span> rfn.parent <span class="comment"># clean up when parent does</span>
-				onstop = () -&gt;
-					rfn.stopListening rfn.parent <span class="comment"># clean up events</span>
-					rfn.stop()
+			rfn.parent = old <span class="comment"># cache parent on context creation</span></pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-17">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-17">&#182;</a>
+							</div>
+							<p>clean up when parent does</p>
 
-				rfn.listenTo rfn.parent, <span class="string">"stop"</span>, onstop
-				rfn.listenTo rfn.parent, <span class="string">"run:before"</span>, onstop
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>			<span class="keyword">if</span> rfn.parent <span class="keyword">then</span> rfn.parent.cleanup rfn.stop
 
 			rfn.trigger <span class="string">"start"</span>
 			rfn.first_run = <span class="literal">false</span>
@@ -344,11 +344,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-17">
+				<li id="section-18">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-17">&#182;</a>
+								<a class="pilcrow" href="#section-18">&#182;</a>
 							</div>
 							<p>The context also triggers events using Backbone&#39;s event API. These events include <code>start</code>, <code>run:before</code>, <code>run</code>, <code>run:after</code>, and <code>stop</code>.</p>
 
@@ -359,11 +359,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-18">
+				<li id="section-19">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-18">&#182;</a>
+								<a class="pilcrow" href="#section-19">&#182;</a>
 							</div>
 							<p>Some notable properties of a reactive context include a globally unique id and a base path for scoping. A scoped context requires shorter paths to access the same data. For example, if there is a model at the path <code>Projects.1</code> and the context is scoped to it, any further paths will access the model directly. So <code>Project.1.title</code> becomes just <code>title</code>. Remember the global model can always be accessed with the path <code>$</code>.</p>
 
@@ -375,11 +375,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-19">
+				<li id="section-20">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-19">&#182;</a>
+								<a class="pilcrow" href="#section-20">&#182;</a>
 							</div>
 							<p>Each context defines a <code>subscribe()</code> and <code>unsubscribe()</code> method. These methods take a subscription and watch (or unwatch) for changes to data. Given the same arguments, <code>unsubscribe()</code> should &quot;undo&quot; anything done by <code>subscribe()</code>. Each subscription will only be subscribed to once.</p>
 
@@ -405,11 +405,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-20">
+				<li id="section-21">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-20">&#182;</a>
+								<a class="pilcrow" href="#section-21">&#182;</a>
 							</div>
 							<p>Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.</p>
 
@@ -418,7 +418,29 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 						<div class="content"><div class='highlight'><pre>	rfn.<span class="function"><span class="title">stop</span></span> = (o = {}) -&gt;
 		_.each <span class="property">@subscriptions</span>, (id) =&gt; <span class="property">@unsubscribe</span> id
 		reset()
-		<span class="property">@trigger</span> <span class="string">"stop"</span>
+		<span class="property">@trigger</span> <span class="string">"stop"</span></pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-22">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-22">&#182;</a>
+							</div>
+							<p>Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>	rfn.<span class="function"><span class="title">cleanup</span></span> = (fn) -&gt;
+		onstop = () -&gt;
+			<span class="property">@off</span> <span class="string">"stop"</span>, onstop
+			<span class="property">@off</span> <span class="string">"run:before"</span>, onstop
+			fn()
+
+		<span class="property">@on</span> <span class="string">"stop"</span>, onstop
+		<span class="property">@on</span> <span class="string">"run:before"</span>, onstop
 
 	reset = () -&gt;
 		rfn.subscriptions = []
@@ -431,11 +453,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-21">
+				<li id="section-23">
 						<div class="annotation">
 							
 							<div class="pilwrap for-h2">
-								<a class="pilcrow" href="#section-21">&#182;</a>
+								<a class="pilcrow" href="#section-23">&#182;</a>
 							</div>
 							<h2>Useful Utilities</h2>
 
@@ -444,11 +466,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-22">
+				<li id="section-24">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-22">&#182;</a>
+								<a class="pilcrow" href="#section-24">&#182;</a>
 							</div>
 							<p><code>d.run()</code> is the marriage of <code>d.get()</code> and <code>d.reactive()</code> in a simple package. If just a <code>path</code> is given, <code>d.get()</code> is used to retrieve the data and set up subscriptions. If <code>fn</code> is given, a reactive context is created. If <code>fn</code> is used with <code>path</code>, the context is scoped to <code>path</code>.</p>
 
@@ -468,11 +490,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-23">
+				<li id="section-25">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-23">&#182;</a>
+								<a class="pilcrow" href="#section-25">&#182;</a>
 							</div>
 							<p><code>d.depend()</code> forces the current context to subscribe to <code>data</code>. This allows contexts to subscribe to <code>data</code> even if <code>data</code> doesn&#39;t exist in <code>d.model</code>. It creates a temporary subscription that is destroyed on context close. This method is hackable.</p>
 
@@ -488,11 +510,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-24">
+				<li id="section-26">
 						<div class="annotation">
 							
 							<div class="pilwrap for-h2">
-								<a class="pilcrow" href="#section-24">&#182;</a>
+								<a class="pilcrow" href="#section-26">&#182;</a>
 							</div>
 							<h2>Hackable Methods</h2>
 
@@ -501,11 +523,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-25">
+				<li id="section-27">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-25">&#182;</a>
+								<a class="pilcrow" href="#section-27">&#182;</a>
 							</div>
 							<p>Several methods within this library are &quot;hackable&quot; and can be modified. This is useful for when core data needs to be controlled by something other than Backbone or context specific functionality is desired.</p>
 <hr>
@@ -515,11 +537,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-26">
+				<li id="section-28">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-26">&#182;</a>
+								<a class="pilcrow" href="#section-28">&#182;</a>
 							</div>
 							<p><code>d.retrieve()</code> is responsible for getting the value at path. <code>parts</code> is an array of path partitions, always relative to <code>d.model</code>.</p>
 
@@ -540,11 +562,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-27">
+				<li id="section-29">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-27">&#182;</a>
+								<a class="pilcrow" href="#section-29">&#182;</a>
 							</div>
 							<p><code>d.update()</code> sets a <code>value</code> at path. It also handles the firing of update events so reactive contexts can be rerun.</p>
 
@@ -579,11 +601,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-28">
+				<li id="section-30">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-28">&#182;</a>
+								<a class="pilcrow" href="#section-30">&#182;</a>
 							</div>
 							<p><code>d.process()</code> sets up subscriptions given a <code>value</code> and path <code>parts</code>. This should <strong>only</strong> create subscriptions, not subscribe them to any contexts. Even though this function will be rerun multiple times for the same subscriptions, the API will not duplicate subscriptions.</p>
 
@@ -618,11 +640,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-29">
+				<li id="section-31">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-29">&#182;</a>
+								<a class="pilcrow" href="#section-31">&#182;</a>
 							</div>
 							<p><code>d.subscribe()</code> is the default subscribe method used by subscriptions. <code>this</code> within the method will refer to the subscription using it. By passing <code>fn</code>, this method should set the proper events to call the context any time it needs to update.</p>
 
@@ -641,11 +663,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-30">
+				<li id="section-32">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-30">&#182;</a>
+								<a class="pilcrow" href="#section-32">&#182;</a>
 							</div>
 							<p><code>d.unsubscribe()</code> is the default unsubscribe method used by subscriptions. It is called in the same fashion as <code>d.subscribe()</code>. Given the same arguments, it should completely reverse anything done by the subscribe method.</p>
 
@@ -657,11 +679,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-31">
+				<li id="section-33">
 						<div class="annotation">
 							
 							<div class="pilwrap for-h2">
-								<a class="pilcrow" href="#section-31">&#182;</a>
+								<a class="pilcrow" href="#section-33">&#182;</a>
 							</div>
 							<h2>Helpers</h2>
 
@@ -670,11 +692,38 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-32">
+				<li id="section-34">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-32">&#182;</a>
+								<a class="pilcrow" href="#section-34">&#182;</a>
+							</div>
+							
+						</div>
+						
+				</li>
+				
+				
+				<li id="section-35">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-35">&#182;</a>
+							</div>
+							<p><code>d.join()</code> takes any number of string arguments and concats them together to form a path.</p>
+
+						</div>
+						
+						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">join</span></span> = () -&gt; _.chain(arguments).toArray().each((p) -&gt; d._trim(p)).value().join(<span class="string">"."</span>)</pre></div></div>
+						
+				</li>
+				
+				
+				<li id="section-36">
+						<div class="annotation">
+							
+							<div class="pilwrap ">
+								<a class="pilcrow" href="#section-36">&#182;</a>
 							</div>
 							<p><code>d._parts()</code> takes a string <code>path</code> and divides it into an array of path parts. Optionally pass <code>base</code> to prefix it to path in the event <code>$</code> is not use.</p>
 
@@ -689,11 +738,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-33">
+				<li id="section-37">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-33">&#182;</a>
+								<a class="pilcrow" href="#section-37">&#182;</a>
 							</div>
 							<p><code>d._keysplit()</code> takes a string and separates it by <code>sep</code>. You can use <code>sep</code> in the path by prefixing it with <code>avoid</code>.</p>
 
@@ -717,11 +766,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-34">
+				<li id="section-38">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-34">&#182;</a>
+								<a class="pilcrow" href="#section-38">&#182;</a>
 							</div>
 							<p><code>d._deep()</code> gets or sets a <code>value</code> at <code>key</code> deeply within an object. When setting a <code>value</code> and <code>key</code> doesn&#39;t exist, objects are created to make it fit.</p>
 
@@ -750,11 +799,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-35">
+				<li id="section-39">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-35">&#182;</a>
+								<a class="pilcrow" href="#section-39">&#182;</a>
 							</div>
 							<p><code>d._trim()</code> normalizes a path by removing any leading or trailing separators.</p>
 
@@ -770,11 +819,11 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 				</li>
 				
 				
-				<li id="section-36">
+				<li id="section-40">
 						<div class="annotation">
 							
 							<div class="pilwrap ">
-								<a class="pilcrow" href="#section-36">&#182;</a>
+								<a class="pilcrow" href="#section-40">&#182;</a>
 							</div>
 							<p><code>d._isBackboneData()</code> tests <code>obj</code> as a Backbone model or collection. Useful in determining if data can take events or needs to be accessed in a different way.</p>
 

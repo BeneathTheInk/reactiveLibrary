@@ -49,6 +49,8 @@ Each context defines a `subscribe()` and `unsubscribe()` method. These methods t
 
 Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.
 
+Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.
+
 Useful Utilities
 ----------------
 
@@ -73,6 +75,8 @@ Several methods within this library are "hackable" and can be modified. This is 
 
 Helpers
 ----------------
+
+`d.join()` takes any number of string arguments and concats them together to form a path.
 
 `d._parts()` takes a string `path` and divides it into an array of path parts. Optionally pass `base` to prefix it to path in the event `$` is not use.
 

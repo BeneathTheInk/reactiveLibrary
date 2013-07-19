@@ -44,14 +44,7 @@ d.subs =
 			
 			sub.add = (ctx, options) ->
 				@contexts.push ctx
-				
-				if ext.temporary
-					onstop = () =>
-						d.subs.remove @id
-						@stopListening ctx # clean up events
-					
-					@listenTo ctx, "stop", onstop
-					@listenTo ctx, "run:before", onstop
+				if ext.temporary then ctx.cleanup () => d.subs.remove @id
 
 			sub.remove = (ctx, options) ->
 				@contexts = _.without @contexts, ctx
@@ -129,13 +122,8 @@ d.reactive = (fn, options = {}) ->
 		if rfn.first_run
 			rfn.parent = old # cache parent on context creation
 			
-			if rfn.parent # clean up when parent does
-				onstop = () ->
-					rfn.stopListening rfn.parent # clean up events
-					rfn.stop()
-
-				rfn.listenTo rfn.parent, "stop", onstop
-				rfn.listenTo rfn.parent, "run:before", onstop
+			# clean up when parent does
+			if rfn.parent then rfn.parent.cleanup rfn.stop
 
 			rfn.trigger "start"
 			rfn.first_run = false
@@ -180,6 +168,16 @@ d.reactive = (fn, options = {}) ->
 		_.each @subscriptions, (id) => @unsubscribe id
 		reset()
 		@trigger "stop"
+
+# Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.
+	rfn.cleanup = (fn) ->
+		onstop = () ->
+			@off "stop", onstop
+			@off "run:before", onstop
+			fn()
+
+		@on "stop", onstop
+		@on "run:before", onstop
 
 	reset = () ->
 		rfn.subscriptions = []
@@ -304,6 +302,10 @@ d.unsubscribe = (fn, options = {}) ->
 # Helpers
 # ----------------
 #
+
+# `d.join()` takes any number of string arguments and concats them together to form a path.
+d.join = () -> _.chain(arguments).toArray().each((p) -> d._trim(p)).value().join(".")
+
 # `d._parts()` takes a string `path` and divides it into an array of path parts. Optionally pass `base` to prefix it to path in the event `$` is not use.
 d._parts = (path, base) ->
 	path = d._trim path
