@@ -326,7 +326,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 
 						</div>
 						
-						<div class="content"><div class='highlight'><pre>			<span class="keyword">if</span> rfn.parent <span class="keyword">then</span> rfn.parent.cleanup rfn.stop
+						<div class="content"><div class='highlight'><pre>			<span class="keyword">if</span> rfn.parent <span class="keyword">then</span> rfn.parent.cleanup rfn.stop.bind(rfn)
 
 			rfn.trigger <span class="string">"start"</span>
 			rfn.first_run = <span class="literal">false</span>
@@ -434,7 +434,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 						</div>
 						
 						<div class="content"><div class='highlight'><pre>	rfn.<span class="function"><span class="title">cleanup</span></span> = (fn) -&gt;
-		onstop = () -&gt;
+		onstop = () =&gt;
 			<span class="property">@off</span> <span class="string">"stop"</span>, onstop
 			<span class="property">@off</span> <span class="string">"run:before"</span>, onstop
 			fn()
@@ -502,7 +502,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 						
 						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">depend</span></span> = (data, options = {}) -&gt;
 	<span class="keyword">if</span> ctx = <span class="property">@current</span>
-		sub = <span class="property">@subs</span>.create uuid.v4(), { obj: data, subpath: <span class="literal">null</span> }, { temporary: <span class="literal">true</span> }
+		sub = <span class="property">@subs</span>.create uuid.v4(), data, { temporary: <span class="literal">true</span> }
 		ctx.subscribe sub, options
 		d.subs.clear() <span class="comment"># clean up</span>
 		<span class="keyword">return</span></pre></div></div>
@@ -714,7 +714,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 
 						</div>
 						
-						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">join</span></span> = () -&gt; _.chain(arguments).toArray().each((p) -&gt; d._trim(p)).value().join(<span class="string">"."</span>)</pre></div></div>
+						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">join</span></span> = () -&gt; _.chain(arguments).toArray().flatten().compact().map((p) -&gt; d._trim(p)).value().join(<span class="string">"."</span>)</pre></div></div>
 						
 				</li>
 				

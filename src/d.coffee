@@ -123,7 +123,7 @@ d.reactive = (fn, options = {}) ->
 			rfn.parent = old # cache parent on context creation
 			
 			# clean up when parent does
-			if rfn.parent then rfn.parent.cleanup rfn.stop
+			if rfn.parent then rfn.parent.cleanup rfn.stop.bind(rfn)
 
 			rfn.trigger "start"
 			rfn.first_run = false
@@ -171,7 +171,7 @@ d.reactive = (fn, options = {}) ->
 
 # Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.
 	rfn.cleanup = (fn) ->
-		onstop = () ->
+		onstop = () =>
 			@off "stop", onstop
 			@off "run:before", onstop
 			fn()
@@ -205,7 +205,7 @@ d.run = (path, fn, options) ->
 # `d.depend()` forces the current context to subscribe to `data`. This allows contexts to subscribe to `data` even if `data` doesn't exist in `d.model`. It creates a temporary subscription that is destroyed on context close. This method is hackable.
 d.depend = (data, options = {}) ->
 	if ctx = @current
-		sub = @subs.create uuid.v4(), { obj: data, subpath: null }, { temporary: true }
+		sub = @subs.create uuid.v4(), data, { temporary: true }
 		ctx.subscribe sub, options
 		d.subs.clear() # clean up
 		return
@@ -304,7 +304,7 @@ d.unsubscribe = (fn, options = {}) ->
 #
 
 # `d.join()` takes any number of string arguments and concats them together to form a path.
-d.join = () -> _.chain(arguments).toArray().each((p) -> d._trim(p)).value().join(".")
+d.join = () -> _.chain(arguments).toArray().flatten().compact().map((p) -> d._trim(p)).value().join(".")
 
 # `d._parts()` takes a string `path` and divides it into an array of path parts. Optionally pass `base` to prefix it to path in the event `$` is not use.
 d._parts = (path, base) ->
