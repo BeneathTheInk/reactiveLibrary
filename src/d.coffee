@@ -113,11 +113,9 @@ d.set = (path, value, options = {}) ->
 # Reactive Contexts
 # -----------------
 #
-# `d.reactive()` takes a function `fn` to be rerun any time a dependency changes. A dependency is simply any data returned from `d.get()`. `fn` will have `this` pointing to the reactive context. It is given no arguments and expects no return value. `d.reactive()` returns a "reactive context" which is simply a wrapper function for `fn`.
+# `d.reactive()` takes a function `fn` to be rerun any time a dependency changes. A dependency is simply any data returned from `d.get()`. `fn` will have `this` pointing to the reactive context. It is given no arguments and expects no return value. `d.reactive()` returns a "reactive context" which is simply a wrapper function for `fn`. A reactive context must be called at least once to initiate its subscriptions.
 #
-# A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted.
-#
-# A reactive context must be called at least once to initiate its subscriptions. In this way, contexts are highly transportable and can be placed in more than one location, including multiple parent contexts. The context will automatically clean up after itself, only completely stopping when *all* parent contexts have also been stopped.
+# A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted. Reactive contexts can only be placed within a single parent context. If a context is run within a context that isn't it's parent, closing events will not be received and memory will leak.
 d.reactive = (fn, options = {}) ->
 	self = this
 
@@ -125,24 +123,23 @@ d.reactive = (fn, options = {}) ->
 		if rfn.running then return
 		rfn.running = true
 
-		parent = self.current # cache the parent
+		old = self.current # cache the old context
 		self.current = rfn # set the ctx
 
-		if parent and !_.contains rfn.parents, parent.id # first run
-			rfn.parents.push(parent.id)
+		if rfn.first_run
+			rfn.parent = old # cache parent on context creation
+			
+			if rfn.parent # clean up when parent does
+				onstop = () ->
+					rfn.stopListening rfn.parent # clean up events
+					rfn.stop()
 
-			onstop = () ->
-				rfn.parents = _.without rfn.parents, parent.id
-				rfn.stopListening parent # clean up stop events
-				unless rfn.parents.length or rfn.root then rfn.stop()
-
-			rfn.listenTo parent, "stop", onstop
-			rfn.listenTo parent, "run:before", onstop
+				rfn.listenTo rfn.parent, "stop", onstop
+				rfn.listenTo rfn.parent, "run:before", onstop
 
 			rfn.trigger "start"
-		
-		unless parent then rfn.root = true # make sure we don't stop suddenly
-		
+			rfn.first_run = false
+
 		rfn.trigger "run:before" # pre run
 
 		fn.call rfn # run
@@ -150,7 +147,7 @@ d.reactive = (fn, options = {}) ->
 		rfn.trigger "run" # post run
 		rfn.trigger "run:after"
 
-		self.current = parent # reset the ctx
+		self.current = old # reset the ctx
 		rfn.running = false
 
 # The context also triggers events using Backbone's event API. These events include `start`, `run:before`, `run`, `run:after`, and `stop`.
@@ -164,7 +161,7 @@ d.reactive = (fn, options = {}) ->
 	rfn.subscribe = (sub, o = {}) ->
 		return if _.contains @subscriptions, sub.id
 		subscribe = options.subscribe or d.subscribe
-
+		
 		sub.add @, o # tell the subscription about us
 		subscribe.call sub, @, o # enable the subscription
 		@subscriptions.push sub.id
@@ -186,8 +183,8 @@ d.reactive = (fn, options = {}) ->
 
 	reset = () ->
 		rfn.subscriptions = []
-		rfn.parents = [] # parent ctxs
-		rfn.root = false
+		rfn.parent = null
+		rfn.first_run = true
 
 	reset()
 	return rfn

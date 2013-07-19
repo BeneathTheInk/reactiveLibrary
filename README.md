@@ -37,11 +37,9 @@ The second thing `d.get()` does is set up the specified data as a subscription a
 Reactive Contexts
 -----------------
 
-`d.reactive()` takes a function `fn` to be rerun any time a dependency changes. A dependency is simply any data returned from `d.get()`. `fn` will have `this` pointing to the reactive context. It is given no arguments and expects no return value. `d.reactive()` returns a "reactive context" which is simply a wrapper function for `fn`.
+`d.reactive()` takes a function `fn` to be rerun any time a dependency changes. A dependency is simply any data returned from `d.get()`. `fn` will have `this` pointing to the reactive context. It is given no arguments and expects no return value. `d.reactive()` returns a "reactive context" which is simply a wrapper function for `fn`. A reactive context must be called at least once to initiate its subscriptions.
 
-A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted.
-
-A reactive context must be called at least once to initiate its subscriptions. In this way, contexts are highly transportable and can be placed in more than one location, including multiple parent contexts. The context will automatically clean up after itself, only completely stopping when *all* parent contexts have also been stopped.
+A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted. Reactive contexts can only be placed within a single parent context. If a context is run within a context that isn't it's parent, closing events will not be received and memory will leak.
 
 The context also triggers events using Backbone's event API. These events include `start`, `run:before`, `run`, `run:after`, and `stop`.
 

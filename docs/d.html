@@ -302,9 +302,8 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 							<div class="pilwrap ">
 								<a class="pilcrow" href="#section-16">&#182;</a>
 							</div>
-							<p><code>d.reactive()</code> takes a function <code>fn</code> to be rerun any time a dependency changes. A dependency is simply any data returned from <code>d.get()</code>. <code>fn</code> will have <code>this</code> pointing to the reactive context. It is given no arguments and expects no return value. <code>d.reactive()</code> returns a &quot;reactive context&quot; which is simply a wrapper function for <code>fn</code>.</p>
-<p>A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted.</p>
-<p>A reactive context must be called at least once to initiate its subscriptions. In this way, contexts are highly transportable and can be placed in more than one location, including multiple parent contexts. The context will automatically clean up after itself, only completely stopping when <em>all</em> parent contexts have also been stopped.</p>
+							<p><code>d.reactive()</code> takes a function <code>fn</code> to be rerun any time a dependency changes. A dependency is simply any data returned from <code>d.get()</code>. <code>fn</code> will have <code>this</code> pointing to the reactive context. It is given no arguments and expects no return value. <code>d.reactive()</code> returns a &quot;reactive context&quot; which is simply a wrapper function for <code>fn</code>. A reactive context must be called at least once to initiate its subscriptions.</p>
+<p>A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted. Reactive contexts can only be placed within a single parent context. If a context is run within a context that isn&#39;t it&#39;s parent, closing events will not be received and memory will leak.</p>
 
 						</div>
 						
@@ -315,24 +314,23 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 		<span class="keyword">if</span> rfn.running <span class="keyword">then</span> <span class="keyword">return</span>
 		rfn.running = <span class="literal">true</span>
 
-		parent = self.current <span class="comment"># cache the parent</span>
+		old = self.current <span class="comment"># cache the old context</span>
 		self.current = rfn <span class="comment"># set the ctx</span>
 
-		<span class="keyword">if</span> parent <span class="keyword">and</span> !_.contains rfn.parents, parent.id <span class="comment"># first run</span>
-			rfn.parents.push(parent.id)
+		<span class="keyword">if</span> rfn.first_run
+			rfn.parent = old <span class="comment"># cache parent on context creation</span>
+			
+			<span class="keyword">if</span> rfn.parent <span class="comment"># clean up when parent does</span>
+				onstop = () -&gt;
+					rfn.stopListening rfn.parent <span class="comment"># clean up events</span>
+					rfn.stop()
 
-			onstop = () -&gt;
-				rfn.parents = _.without rfn.parents, parent.id
-				rfn.stopListening parent <span class="comment"># clean up stop events</span>
-				<span class="keyword">unless</span> rfn.parents.length <span class="keyword">or</span> rfn.root <span class="keyword">then</span> rfn.stop()
-
-			rfn.listenTo parent, <span class="string">"stop"</span>, onstop
-			rfn.listenTo parent, <span class="string">"run:before"</span>, onstop
+				rfn.listenTo rfn.parent, <span class="string">"stop"</span>, onstop
+				rfn.listenTo rfn.parent, <span class="string">"run:before"</span>, onstop
 
 			rfn.trigger <span class="string">"start"</span>
-		
-		<span class="keyword">unless</span> parent <span class="keyword">then</span> rfn.root = <span class="literal">true</span> <span class="comment"># make sure we don't stop suddenly</span>
-		
+			rfn.first_run = <span class="literal">false</span>
+
 		rfn.trigger <span class="string">"run:before"</span> <span class="comment"># pre run</span>
 
 		fn.call rfn <span class="comment"># run</span>
@@ -340,7 +338,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 		rfn.trigger <span class="string">"run"</span> <span class="comment"># post run</span>
 		rfn.trigger <span class="string">"run:after"</span>
 
-		self.current = parent <span class="comment"># reset the ctx</span>
+		self.current = old <span class="comment"># reset the ctx</span>
 		rfn.running = <span class="literal">false</span></pre></div></div>
 						
 				</li>
@@ -390,7 +388,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 						<div class="content"><div class='highlight'><pre>	rfn.<span class="function"><span class="title">subscribe</span></span> = (sub, o = {}) -&gt;
 		<span class="keyword">return</span> <span class="keyword">if</span> _.contains <span class="property">@subscriptions</span>, sub.id
 		subscribe = options.subscribe <span class="keyword">or</span> d.subscribe
-
+		
 		sub.add @, o <span class="comment"># tell the subscription about us</span>
 		subscribe.call sub, @, o <span class="comment"># enable the subscription</span>
 		<span class="property">@subscriptions</span>.push sub.id
@@ -424,8 +422,8 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 
 	reset = () -&gt;
 		rfn.subscriptions = []
-		rfn.parents = [] <span class="comment"># parent ctxs</span>
-		rfn.root = <span class="literal">false</span>
+		rfn.parent = <span class="literal">null</span>
+		rfn.first_run = <span class="literal">true</span>
 
 	reset()
 	<span class="keyword">return</span> rfn</pre></div></div>
