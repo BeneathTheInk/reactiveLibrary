@@ -269,8 +269,9 @@ d.process = (value, parts, options = {}) ->
 		else base += "." + part
 
 	flush = () =>
-		if subpath.length then add subpath[0] # backbone isnt deep, we only want the first one
-		@subs.create base, { obj: obj, subpath: subpath[0] or null }, options
+		#if subpath.length then add subpath[0] # backbone isnt deep, we only want the first one
+		@subs.create base, obj, options
+		_.each subpath, add
 		subpath = []
 
 	_.each parts, (p) =>
@@ -286,13 +287,13 @@ d.process = (value, parts, options = {}) ->
 
 # `d.subscribe()` is the default subscribe method used by subscriptions. `this` within the method will refer to the subscription using it. By passing `fn`, this method should set the proper events to call the context any time it needs to update.
 d.subscribe = (fn, options = {}) ->
-	data = @data.obj
-	subpath = @data.subpath
+	data = @data
+	#subpath = @data.subpath
 
-	if _.isEqual(data, d.model) and !subpath then return
-	else if data instanceof Backbone.Model
-		attr = if subpath then ":" + subpath else ""
-		fn.listenTo data, "change"+attr, fn
+	#if _.isEqual(data, d.model) and !subpath then return
+	if data instanceof Backbone.Model
+		#attr = if subpath then ":" + subpath else ""
+		fn.listenTo data, "change", fn
 	else if data instanceof Backbone.Collection
 		fn.listenTo data, "add", fn
 		fn.listenTo data, "remove", fn
@@ -300,11 +301,11 @@ d.subscribe = (fn, options = {}) ->
 
 # `d.unsubscribe()` is the default unsubscribe method used by subscriptions. It is called in the same fashion as `d.subscribe()`. Given the same arguments, it should completely reverse anything done by the subscribe method.
 d.unsubscribe = (fn, options = {}) ->
-	data = @data.obj
-	subpath = @data.subpath
+	data = @data
+	#subpath = @data.subpath
 
-	if _.isEqual(data, d.model) and !subpath then return
-	else if d._isBackboneData(data) then fn.stopListening data
+	#if _.isEqual(data, d.model) and !subpath then return
+	if d._isBackboneData(data) then fn.stopListening data
 
 # Helpers
 # ----------------
