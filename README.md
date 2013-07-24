@@ -47,6 +47,8 @@ Some notable properties of a reactive context include a globally unique id and a
 
 Each context defines a `subscribe()` and `unsubscribe()` method. These methods take a subscription and watch (or unwatch) for changes to data. Given the same arguments, `unsubscribe()` should "undo" anything done by `subscribe()`. Each subscription will only be subscribed to once.
 
+Sometimes children contexts will subscribe to data before the parent does causing the context to reload multiple times. Use `prevent()` will stop a context from *ever* subscribing to a specified path.
+
 Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.
 
 Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.

@@ -148,6 +148,7 @@ d.reactive = (fn, options = {}) ->
 # Each context defines a `subscribe()` and `unsubscribe()` method. These methods take a subscription and watch (or unwatch) for changes to data. Given the same arguments, `unsubscribe()` should "undo" anything done by `subscribe()`. Each subscription will only be subscribed to once.
 	rfn.subscribe = (sub, o = {}) ->
 		return if _.contains @subscriptions, sub.id
+		return if _.contains @never, sub.path
 		subscribe = options.subscribe or d.subscribe
 		
 		sub.add @, o # tell the subscription about us
@@ -162,6 +163,18 @@ d.reactive = (fn, options = {}) ->
 		sub.remove @, o
 		unsubscribe.call sub, @, o # disable subscription
 		@subscriptions = _.without @subscriptions, sub.id
+
+# Sometimes children contexts will subscribe to data before the parent does causing the context to reload multiple times. Use `prevent()` will stop a context from *ever* subscribing to a specified path.
+	rfn.prevent = (p) ->
+		@never.push p
+		return unless sub = self.subs.find p
+		@unsubscribe sub
+
+	reset = () ->
+		rfn.subscriptions = []
+		rfn.never = []
+		rfn.parent = null
+		rfn.first_run = true
 
 # Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.
 	rfn.stop = (o = {}) ->
@@ -178,11 +191,6 @@ d.reactive = (fn, options = {}) ->
 
 		@on "stop", onstop
 		@on "run:before", onstop
-
-	reset = () ->
-		rfn.subscriptions = []
-		rfn.parent = null
-		rfn.first_run = true
 
 	reset()
 	return rfn
