@@ -294,6 +294,7 @@ d.subscribe = (fn, options = {}) ->
 		fn.listenTo data, "add", fn
 		fn.listenTo data, "remove", fn
 		fn.listenTo data, "sort", fn
+		fn.listenTo data, "reset", fn
 
 # `d.unsubscribe()` is the default unsubscribe method used by subscriptions. It is called in the same fashion as `d.subscribe()`. Given the same arguments, it should completely reverse anything done by the subscribe method.
 d.unsubscribe = (fn, options = {}) ->
