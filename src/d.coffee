@@ -263,7 +263,9 @@ d.update = (parts, value, options = {}) ->
 		@_deep child, rp.join("."), value
 	else child = value
 
-	lo.set path[0], child
+	lo.set path[0], child, silent: true # let backbone set, but we trigger the events
+	lo.trigger "change:#{path[0]}", lo, child, options
+	lo.trigger "change", lo, options
 
 # `d.process()` sets up subscriptions given a `value` and path `parts`. This should **only** create subscriptions, not subscribe them to any contexts. Even though this function will be rerun multiple times for the same subscriptions, the API will not duplicate subscriptions.
 d.process = (value, parts, options = {}) ->

@@ -616,7 +616,9 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 		<span class="property">@_deep</span> child, rp.join(<span class="string">"."</span>), value
 	<span class="keyword">else</span> child = value
 
-	lo.set path[<span class="number">0</span>], child</pre></div></div>
+	lo.set path[<span class="number">0</span>], child, silent: <span class="literal">true</span> <span class="comment"># let backbone set, but we trigger the events</span>
+	lo.trigger <span class="string">"change:<span class="subst">#{path[<span class="number">0</span>]}</span>"</span>, lo, child, options
+	lo.trigger <span class="string">"change"</span>, lo, options</pre></div></div>
 						
 				</li>
 				
