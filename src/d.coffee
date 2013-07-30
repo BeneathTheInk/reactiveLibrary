@@ -157,7 +157,7 @@ d.reactive = (fn, options = {}) ->
 
 	rfn.unsubscribe = (sub, o = {}) ->
 		if _.isString(sub) then sub = self.subs.find sub
-		return unless _.contains @subscriptions, sub.id
+		return unless sub and _.contains @subscriptions, sub.id
 		unsubscribe = options.unsubscribe or d.unsubscribe
 		
 		sub.remove @, o
@@ -320,8 +320,10 @@ d.join = () -> _.chain(arguments).toArray().flatten().compact().map((p) -> d._tr
 # `d._parts()` takes a string `path` and divides it into an array of path parts. Optionally pass `base` to prefix it to path in the event `$` is not use.
 d._parts = (path, base) ->
 	path = d._trim path
-	if /^\$/.test(path) then path = path.replace /^\$\.?/, ""
-	else if base then path = base + "." + path
+	if path is "@" then path = base
+	else if /^\$/.test(path) then path = path.replace /^\$\.?/, ""
+	else if base then path = d.join base, path
+	if /^\$/.test(path) then path = path.replace /^\$\.?/, "" # remove excess from base
 	return _.compact @_keysplit path
 
 # `d._keysplit()` takes a string and separates it by `sep`. You can use `sep` in the path by prefixing it with `avoid`.

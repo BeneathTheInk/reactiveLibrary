@@ -396,7 +396,7 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 
 	rfn.<span class="function"><span class="title">unsubscribe</span></span> = (sub, o = {}) -&gt;
 		<span class="keyword">if</span> _.isString(sub) <span class="keyword">then</span> sub = self.subs.find sub
-		<span class="keyword">return</span> <span class="keyword">unless</span> _.contains <span class="property">@subscriptions</span>, sub.id
+		<span class="keyword">return</span> <span class="keyword">unless</span> sub <span class="keyword">and</span> _.contains <span class="property">@subscriptions</span>, sub.id
 		unsubscribe = options.unsubscribe <span class="keyword">or</span> d.unsubscribe
 		
 		sub.remove @, o
@@ -754,8 +754,10 @@ module.exports = d <span class="comment"># public api</span></pre></div></div>
 						
 						<div class="content"><div class='highlight'><pre>d.<span class="function"><span class="title">_parts</span></span> = (path, base) -&gt;
 	path = d._trim path
-	<span class="keyword">if</span> <span class="regexp">/^\$/.test(path) then path = path.replace /^\$\.?/</span>, <span class="string">""</span>
-	<span class="keyword">else</span> <span class="keyword">if</span> base <span class="keyword">then</span> path = base + <span class="string">"."</span> + path
+	<span class="keyword">if</span> path <span class="keyword">is</span> <span class="string">"@"</span> <span class="keyword">then</span> path = base
+	<span class="keyword">else</span> <span class="keyword">if</span> <span class="regexp">/^\$/.test(path) then path = path.replace /^\$\.?/</span>, <span class="string">""</span>
+	<span class="keyword">else</span> <span class="keyword">if</span> base <span class="keyword">then</span> path = d.join base, path
+	<span class="keyword">if</span> <span class="regexp">/^\$/.test(path) then path = path.replace /^\$\.?/</span>, <span class="string">""</span> <span class="comment"># remove excess from base</span>
 	<span class="keyword">return</span> _.compact <span class="property">@_keysplit</span> path</pre></div></div>
 						
 				</li>
