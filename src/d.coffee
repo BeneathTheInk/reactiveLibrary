@@ -195,6 +195,12 @@ d.unbind = (event, fn) ->
 	unless _.isFunction(fn) then delete evts[name]
 	else evts[name] = _.filter evts[name], (s) -> s.fn isnt fn
 
+d.once = (event, fn) ->
+	cb = _.once ->
+		d.unbind event, cb
+		fn.call @, arguments
+	d.bind event, cb
+
 # synonyms
 d.on = d.bind
 d.off = d.unbind
