@@ -6,6 +6,7 @@ var express = require("express"),
 var app = express();
 
 app.get("/bundle.js", function(req, res) {
+	res.type("application/javascript");
 	var b = browserify();
 	b.require(path.resolve(__dirname, "../lib/d.js"), { expose: "d" });
 	b.add(path.resolve(__dirname, "./test.js"));
