@@ -1,14 +1,13 @@
 {
 	"name": "dee",
-	"version": "0.2.11",
+	"version": "0.3.1",
 	"scripts": {
 		"test": "node ./test/server"
 	},
 	"main": "./lib/d.js",
 	"dependencies": {
 		"underscore": "1.5.1",
-		"uuid": "1.4.1",
-		"backbone": "1.0.0"
+		"backbone-deep-model": "git://github.com/appleifreak/backbone-deep-model.git"
 	},
 	"devDependencies": {
 		"express": "3.3.2",

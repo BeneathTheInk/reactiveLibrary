@@ -5,8 +5,9 @@ fs = require "fs"
 lib = "./lib/d.js"
 src = "./src/d.coffee"
 
-run = (cmd) ->
+run = (cmd, cb) ->
 	e = exec cmd
+	e.on 'close', () -> cb() if typeof cb is "function"
 	e.stdout.pipe(process.stdout)
 	e.stderr.pipe(process.stderr)
 
@@ -21,8 +22,10 @@ task 'build', 'Build coffeescript source to javascript.', (options) ->
 	run "coffee -o #{o} -c#{w} src/"
 
 task 'bundle', "Bundle it with browserify.", (options) ->
-	o = options.output or process.cwd() + "/bundle.js"
-	run "browserify #{lib} "+(if options.minify then " | uglifyjs - " else "")+"-o #{o}"
+	o = options.output or process.cwd() + "/dist/"
+	run "cake build", () ->
+		run "browserify #{lib} -s dee -o #{o}dee.js"
+		run "browserify #{lib} -s dee | uglifyjs - -o #{o}dee.min.js"
 
 task 'docs', "Create documentation from source code.", (options) ->
 	o = options.output or process.cwd() + "/docs"
