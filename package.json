@@ -7,7 +7,6 @@
 	"main": "./lib/d.js",
 	"dependencies": {
 		"underscore": "1.5.1",
-		"uuid": "1.4.1",
 		"backbone-deep-model": "git://github.com/appleifreak/backbone-deep-model.git"
 	},
 	"devDependencies": {

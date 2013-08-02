@@ -2,7 +2,6 @@
 
 Backbone = require "backbone-deep-model"
 _ = require "underscore"
-uuid = require "uuid"
 
 d = () -> d.run.apply d, arguments
 module.exports = d
@@ -58,14 +57,17 @@ d.reactive = (fn, options = {}) ->
 
 		setTimeout () => # defer
 			unless @stopped then @run() # run fn
+			@trigger "invalid"
 			@invalid = false
 		, 0
 
 	rfn.stop = () ->
 		@stopped = true
+		@invalidate() # mainly for the event
 		@trigger "stop"
 		reset()
 
+	# same as @on("invalid") so maybe not necessary
 	rfn.cleanup = (fn) ->
 		onstop = () =>
 			@off "stop", onstop
