@@ -1,188 +1,77 @@
 # # D: The Reactive Library
-#
-# ---
-# 
-# This library has three hard dependencies: [Backbone](http://backbonejs.org/), [Underscore](http://documentcloud.github.io/underscore) and [node-uuid](https://github.com/broofa/node-uuid). While made for the Node.js environment, this library is compatible with the client using browserify.
-Backbone = require "backbone"
+
+Backbone = require "backbone-deep-model"
 _ = require "underscore"
-uuid = require "uuid"
 
-# The Major Variable
-# ------------------
-#
-# The variable `d` is global variable to access this library. `d` itself is actually a function that wraps `d.run()` for quick context set up and data retrieval. See `d.run()` for more info.
 d = () -> d.run.apply d, arguments
-module.exports = d # public api
+module.exports = d
 
-# Global Model
-# ------------
-#
-# D setups a new Backbone model to house all of the application data. Data might include standard JavaScript variable types or Backbone models and collections. This allows for data to be accessible globally without affecting what it can do. You shouldn't access this model directly; instead use `d.get()` and `d.set()`.
-d.model = new Backbone.Model()
+debug = () -> if d.debug then console.log.apply console, arguments
 
-# Subscriptions
-# -------------
-#
-# Subscriptions are a connection between a path and multiple contexts. A subscription is created the first time it is requested and is then subscribed to each context that needs it.
-d.subs =
-	subscriptions: []
-	queue: [] # to automate get subscription setup
+d.model = new Backbone.DeepModel
+# d.debug = true
 
-# `d.subs.create()` creates a new subscription at `path` with `data`. If the subscription already exists, any new data replaces the existing. The created subscription will be attached to a queue that can be accessed later. This method *does not* subscribe data to any context, but sets up the methods to do so.
-	create: (path, data, ext = {}) ->
-		sub = @find path
-
-		unless sub
-			sub =
-				id: uuid.v4()
-				path: path
-				data: data
-				contexts: []
-			
-			_.extend sub, Backbone.Events # eventful
-			_.extend sub, ext
-			
-			sub.add = (ctx, options) ->
-				@contexts.push ctx
-				if ext.temporary then ctx.cleanup () => d.subs.remove @id
-
-			sub.remove = (ctx, options) ->
-				@contexts = _.without @contexts, ctx
-
-			@subscriptions.push sub
-
-		else unless _.isEqual data, sub.data
-			ctxs = sub.contexts
-
-			_.each ctxs, (ctx) -> ctx.unsubscribe sub # unsubscribe from current data
-			sub.contexts = []
-			sub.data = data # Set current data
-			_.each ctxs, (ctx) -> ctx.subscribe sub # resubscribe to new data
-		
-		@queue.push sub
-		return sub
-
-# `d.subs.find()` turns a `path` or subscription `id` into a subscription. This is useful for subscription maintenance, including subscribing and unsubscribing from contexts.
-	find: (path) ->
-		return _.find @subscriptions, (sub) ->
-			return sub.path is path or sub.id is path
-
-# `d.subs.remove()` completely removes a subscription from existence. All subscribed contexts are unsubscribed. 
-	remove: (id) ->
-		return unless sub = @find id
-		_.each sub.contexts, (ctx) -> ctx.unsubscribe sub
-		index = _.indexOf @subscriptions, sub
-		@subscriptions.splice index, 1
-	
-	clear: () -> @queue = []
-
-# Using Data
-# ----------
-#
-# `d.get()` is a simple function that does many things. The first task of `d.get()` is to retrieve data at `path`. A `path` is a string of parts separated by a `.`. Each part refers a level of the data within `d.model`. For example, a path like `_session.foo.bar` would be resolved as `d.model.get("_session")["foo"]["bar"]`.
-#
-# `d.get()` sets up a special starting path part `$`. This path will *always* refer to the global model even when the context is scoped.
-#
-# The second thing `d.get()` does is set up the specified data as a subscription and subscribes it to the current context. Whenever a "change" to data is detected, the context will be rerun.
-d.get = (path, options = {}) ->
-	ctx = @current
-	base = @_trim (if ctx then ctx.path) or ""
-	parts = @_parts path, base
-	val = @retrieve parts, options
-
-	if options.reactive isnt false and ctx # subscribe path to ctx
-		d.subs.clear() # we need a clean space
-		@process val, parts, options # process path into subscription
-		_.each d.subs.queue, (sub) -> ctx.subscribe sub, options # start subscription
-		d.subs.clear() # clean again
-
-	return if val? then val else options.default
-
-# `d.set()`, on the other hand, sets data at `path`. `d.set()` is dynamic enough to translate a string path into a series of models and collections so the right value is always set. This will also automatically resubscribe to any data if the subscription was changed.
-d.set = (path, value, options = {}) ->
-	parts = @_parts path
-	@update parts, value, options
-
-# Reactive Contexts
-# -----------------
-#
-# `d.reactive()` takes a function `fn` to be rerun any time a dependency changes. A dependency is simply any data returned from `d.get()`. `fn` will have `this` pointing to the reactive context. It is given no arguments and expects no return value. `d.reactive()` returns a "reactive context" which is simply a wrapper function for `fn`. A reactive context must be called at least once to initiate its subscriptions.
-#
-# A neat feature of contexts is their ability to be nested within each other. Any time a parent context is run, all children contexts are stopped and restarted. Reactive contexts can only be placed within a single parent context. If a context is run within a context that isn't it's parent, closing events will not be received and memory will leak.
 d.reactive = (fn, options = {}) ->
 	self = this
 
-	rfn = () ->
-		if rfn.running then return
-		rfn.running = true
+	# rfn or rfn.run must be called first
+	rfn = () -> rfn.run()
+
+	rfn.id = _.uniqueId()
+	rfn.path = options.path # base path
+	_.extend rfn, Backbone.Events
+	(reset = () ->
+		_.extend rfn,
+			parent: null
+			prevented: []
+			firstRun: true
+			running: false
+			stopped: true
+	)()
+
+	rfn.run = () ->
+		if @running then return
+		@running = true
+		@stopped = false
 
 		old = self.current # cache the old context
 		self.current = rfn # set the ctx
 
-		if rfn.first_run
-			rfn.parent = old # cache parent on context creation
-			
-			# clean up when parent does
-			if rfn.parent then rfn.parent.cleanup rfn.stop.bind(rfn)
+		if @firstRun
+			@parent = old or null # cache parent on context creation
+			if @parent then @parent.cleanup () => @stop()
+			@trigger "start"
+			@firstRun = false
 
-			rfn.trigger "start"
-			rfn.first_run = false
-
-		rfn.trigger "run:before" # pre run
+		debug "started >", @id
+		@trigger "run:before" # pre run
 
 		fn.call rfn # run
 
-		rfn.trigger "run" # post run
-		rfn.trigger "run:after"
+		@trigger "run" # post run
+		@trigger "run:after"
+		debug "finished >", @id
 
 		self.current = old # reset the ctx
-		rfn.running = false
+		@running = false
 
-# The context also triggers events using Backbone's event API. These events include `start`, `run:before`, `run`, `run:after`, and `stop`.
-	_.extend rfn, Backbone.Events # eventful
+	rfn.invalidate = () ->
+		if @invalid then return # no need to re-enqueue
+		@invalid = true
 
-# Some notable properties of a reactive context include a globally unique id and a base path for scoping. A scoped context requires shorter paths to access the same data. For example, if there is a model at the path `Projects.1` and the context is scoped to it, any further paths will access the model directly. So `Project.1.title` becomes just `title`. Remember the global model can always be accessed with the path `$`.
-	rfn.id = uuid.v4() # unique ctx id
-	rfn.path = options.path # base path
+		setTimeout () => # defer
+			unless @stopped then @run() # run fn
+			@trigger "invalid"
+			@invalid = false
+		, 0
 
-# Each context defines a `subscribe()` and `unsubscribe()` method. These methods take a subscription and watch (or unwatch) for changes to data. Given the same arguments, `unsubscribe()` should "undo" anything done by `subscribe()`. Each subscription will only be subscribed to once.
-	rfn.subscribe = (sub, o = {}) ->
-		return if _.contains @subscriptions, sub.id
-		return if _.contains @never, sub.path
-		subscribe = options.subscribe or d.subscribe
-		
-		sub.add @, o # tell the subscription about us
-		subscribe.call sub, @, o # enable the subscription
-		@subscriptions.push sub.id
-
-	rfn.unsubscribe = (sub, o = {}) ->
-		if _.isString(sub) then sub = self.subs.find sub
-		return unless sub and _.contains @subscriptions, sub.id
-		unsubscribe = options.unsubscribe or d.unsubscribe
-		
-		sub.remove @, o
-		unsubscribe.call sub, @, o # disable subscription
-		@subscriptions = _.without @subscriptions, sub.id
-
-# Sometimes children contexts will subscribe to data before the parent does causing the context to reload multiple times. Use `prevent()` will stop a context from *ever* subscribing to a specified path.
-	rfn.prevent = (p) ->
-		@never.push p
-		return unless sub = self.subs.find p
-		@unsubscribe sub
-
-	reset = () ->
-		rfn.subscriptions = []
-		rfn.never = []
-		rfn.parent = null
-		rfn.first_run = true
-
-# Contexts also have a stop method that halts the context completely. All subscriptions are unsubscribed and the context is brought to a normalized state. A context can be restarted by calling it again.
-	rfn.stop = (o = {}) ->
-		_.each @subscriptions, (id) => @unsubscribe id
-		reset()
+	rfn.stop = () ->
+		@stopped = true
+		@invalidate() # mainly for the event
 		@trigger "stop"
+		reset()
 
-# Reactive contexts come with an easy clean up utility that helps to run some function whenever the context is stopped or re-run. This is useful for deep contexts that need to be destroyed regularly.
+	# same as @on("invalid") so maybe not necessary
 	rfn.cleanup = (fn) ->
 		onstop = () =>
 			@off "stop", onstop
@@ -192,13 +81,169 @@ d.reactive = (fn, options = {}) ->
 		@on "stop", onstop
 		@on "run:before", onstop
 
-	reset()
+	rfn.prevent = (path) ->
+		@prevented.push path unless _.contains @prevented, path
+
+	rfn.event = (val, path, options) ->
+		return if _.contains @prevented, path
+		@invalidate()
+
+	rfn.subscribe = (path, options = {}) ->
+		{path, parts} = d._pathOrPart path
+		debug "subscribing >", path
+		d.bind "change:#{path}", @event, @
+
+	rfn.unsubscribe = (path, options = {}) ->
+		{path, parts} = d._pathOrPart path
+		debug "unsubscribing >", path
+		d.unbind "change:#{path}", @event
+
 	return rfn
 
-# Useful Utilities
-# ----------------
-#
-# `d.run()` is the marriage of `d.get()` and `d.reactive()` in a simple package. If just a `path` is given, `d.get()` is used to retrieve the data and set up subscriptions. If `fn` is given, a reactive context is created. If `fn` is used with `path`, the context is scoped to `path`.
+d.get = (path, options = {}) ->
+	parts = d._parts path
+	{path, parts} = d._pathOrPart parts
+	val = d.retrieve parts, options
+	ctx = d.current
+
+	if options.reactive isnt false and ctx
+		ctx.subscribe path, options
+		ctx.cleanup () -> ctx.unsubscribe path, options
+
+	return val
+
+d.retrieve = (parts, options = {}) ->
+	{parts} = d._pathOrPart parts
+
+	cur = d.model
+	_parts = []
+	path = []
+	subpath = []
+
+	push = (data) ->
+		_parts.push
+			path: path
+			subpath: subpath
+			fullpath: d.join path, subpath
+			data: cur
+		
+		path = path.concat subpath
+		subpath = []
+		cur = data
+
+	_.each parts, (part) ->
+		subpath.push part
+		val = cur.get d.join subpath
+		if d._isBackboneData(val) then push val
+	
+	push() # last push
+
+	return if options.complex is true then _parts
+	else d._complexToValue _parts
+
+d.set = (path, value, options = {}) ->
+	{path, parts} = d._pathOrPart path
+	_parts = d.retrieve parts, { complex: true }
+	return unless mod = _.last _parts
+
+	unless mod.subpath.length and _parts.length >= 2 then mod = _.first _.last _parts, 2
+	return unless mod.subpath.length
+
+	# add events to all incoming backbone data
+	if d._isBackboneData(value) then value.on "all", d.event path
+
+	# set value
+	mod.data.set d.join(mod.subpath), value
+
+d.event = (path) ->
+	return (event, args...) ->
+		{event, name, attr} = d._eventParse event
+		return if attr.substr(-1) is "*" # ignore backbone deep dynamic paths
+		isBase = _.isEmpty attr # base means event was emitted without attr
+		fp = d.join path, attr
+
+		# fix event for collections
+		if name is "change" and attr and @ instanceof Backbone.Collection
+			return unless model = args[0]
+			fp = d.join path, model.cid, attr
+
+		# run event
+		debug "event >", "#{name}:#{fp}"
+		d.trigger fp, name, { isBase, args }
+
+		# other events trigger change on the tree, but only to children
+		if name isnt "change"
+			d.trigger fp, "change", { isBase: true } # always register change with parents
+			return unless model = args[0]
+			d.trigger d.join(fp, model.cid), "change", { isBase: false } # register lower events
+
+d.model.on "all", d.event ""
+d._paths = {}
+
+d.bind = (event, fn, context) ->
+	return unless _.isString(event) and _.isFunction(fn)
+	{event, name, attr} = d._eventParse event
+	d._paths[attr] = {} unless _.has d._paths, attr
+	evts = d._paths[attr]
+	evts[name] = [] unless _.has evts, name
+	evts[name].push { fn, context }
+
+d.unbind = (event, fn) ->
+	return unless _.isString(event)
+	{event, name, attr} = d._eventParse event
+	return unless _.isObject evts = d._paths[attr]
+	unless _.isFunction(fn) then delete evts[name]
+	else evts[name] = _.filter evts[name], (s) -> s.fn isnt fn
+
+# synonyms
+d.on = d.bind
+d.off = d.unbind
+
+# add backbone listenTo methods
+_.extend d, _.pick Backbone.Events, "listenTo", "listenToOnce", "stopListening"
+
+d.trigger = (attr, name = "change", options = {}) ->
+	return if _.isEmpty parts = d.retrieve d.split(attr), complex: true
+	{subpath, path} = _.last parts
+
+	_.defaults options,
+		isBase: false
+		args: []
+
+	# isnt base, and empty subpath, get second to last
+	if !options.isBase and _.isEmpty(subpath)
+		return if parts.length < 2 # something is very wrong here
+		{subpath, path} = _.first _.last parts, 2
+
+	execFns = (subs, path) ->
+		return unless _.isArray subs
+		val = d.retrieve d.split path
+		debug "exec > #{name}:#{path}"
+		_.each subs, (s) ->
+			ctx = s.context or null
+			s.fn.call ctx, val, attr, options
+
+	if name is "change" # change event cause updates on most of the tree
+		if options.isBase # basic change event on an object (ie no subpath)
+			# all parents including self
+			_.each d._paths, (evts, p) ->
+				execFns evts[name], p if d._isChildOf p, attr, true
+		else
+			# all children, but not self
+			_.each d._paths, (evts, p) ->
+				execFns evts[name], p if d._isChildOf attr, p
+
+			# all variations of subpath including self
+			base = d.join path
+			_.each subpath, (p) ->
+				base = d.join base, p
+				return unless _.isObject evts = d._paths[base]
+				execFns evts[name], base
+					
+	else # these events do not
+		return unless _.isObject evts = d._paths[attr]
+		execFns evts[name], attr
+
 d.run = (path, fn, options) ->
 	if _.isObject(fn) and !_.isFunction(fn) and !options then [options, fn] = [fn, null]
 	if _.isFunction(path) and !fn then [fn, path] = [path, null]
@@ -210,123 +255,38 @@ d.run = (path, fn, options) ->
 		return r
 	else return @get path, options
 
-# `d.depend()` forces the current context to subscribe to `data`. This allows contexts to subscribe to `data` even if `data` doesn't exist in `d.model`. It creates a temporary subscription that is destroyed on context close. This method is hackable.
-d.depend = (data, options = {}) ->
-	if ctx = @current
-		sub = @subs.create uuid.v4(), data, { temporary: true }
-		ctx.subscribe sub, options
-		d.subs.clear() # clean up
-		return
+# helpers
 
-# Hackable Methods
-# ----------------
-#
-# Several methods within this library are "hackable" and can be modified. This is useful for when core data needs to be controlled by something other than Backbone or context specific functionality is desired.
-#
-# ---
-#
-# `d.retrieve()` is responsible for getting the value at path. `parts` is an array of path partitions, always relative to `d.model`.
-d.retrieve = (parts, options = {}) ->
-	cur = @model
+d.join = () ->
+	_.chain(arguments)
+		.toArray()
+		.flatten()
+		.compact()
+		.filter((p) -> _.isString p)
+		.map((p) -> d.trim p)
+		.value()
+		.join(".")
 
-	if _.some(parts, (p) =>
-		unless _.isObject(cur) then return true
-		else if @_isBackboneData(cur) then cur = cur.get(p)
-		else cur = cur[p]
-		return false
-	) then return undefined
-
-	return cur
-
-# `d.update()` sets a `value` at path. It also handles the firing of update events so reactive contexts can be rerun.
-d.update = (parts, value, options = {}) ->
-	lo = @model
-	cur = @model
-	path = []
-
-	_.each parts, (p) =>
-		if @_isBackboneData(cur)
-			lo = cur
-			cur = cur.get(p)
-			path = []
-		else if _.isObject(cur)
-			cur = cur[p]
-		
-		path.push p
-
-	rp = _.rest path
-	child = lo.get path[0]
-
-	if rp.length
-		unless _.isObject(child) then child = {}
-		else child = _.clone child
-		@_deep child, rp.join("."), value
-	else child = value
-
-	lo.set path[0], child, silent: true # let backbone set, but we trigger the events
-	lo.trigger "change:#{path[0]}", lo, child, options
-	lo.trigger "change", lo, options
-
-# `d.process()` sets up subscriptions given a `value` and path `parts`. This should **only** create subscriptions, not subscribe them to any contexts. Even though this function will be rerun multiple times for the same subscriptions, the API will not duplicate subscriptions.
-d.process = (value, parts, options = {}) ->
-	obj = @model
-	base = ""
-	paths = []
-	subpath = []
-
-	add = (part) ->
-		if _.isEmpty(base) then base = part
-		else base += "." + part
-
-	flush = () =>
-		@subs.create base, obj
-		_.each subpath, add
-		subpath = []
-
-	_.each parts, (p) =>
-		paths.push p
-		val = @retrieve paths
-		subpath.push p
-
-		if @_isBackboneData val
-			flush() # flush the cache
-			obj = val # set the major object
-
-	flush() # flush one last time
-
-# `d.subscribe()` is the default subscribe method used by subscriptions. `this` within the method will refer to the subscription using it. By passing `fn`, this method should set the proper events to call the context any time it needs to update.
-d.subscribe = (fn, options = {}) ->
-	data = @data
-	
-	if data instanceof Backbone.Model
-		fn.listenTo data, "change", fn
-	else if data instanceof Backbone.Collection
-		fn.listenTo data, "add", fn
-		fn.listenTo data, "remove", fn
-		fn.listenTo data, "sort", fn
-		fn.listenTo data, "reset", fn
-
-# `d.unsubscribe()` is the default unsubscribe method used by subscriptions. It is called in the same fashion as `d.subscribe()`. Given the same arguments, it should completely reverse anything done by the subscribe method.
-d.unsubscribe = (fn, options = {}) ->
-	if d._isBackboneData(@data) then fn.stopListening @data
-
-# Helpers
-# ----------------
-#
-
-# `d.join()` takes any number of string arguments and concats them together to form a path.
-d.join = () -> _.chain(arguments).toArray().flatten().compact().map((p) -> d._trim(p)).value().join(".")
-
-# `d._parts()` takes a string `path` and divides it into an array of path parts. Optionally pass `base` to prefix it to path in the event `$` is not use.
-d._parts = (path, base) ->
-	path = d._trim path
+d.split = (path, base) ->
+	path = d.trim path
 	if path is "@" then path = base
 	else if /^\$/.test(path) then path = path.replace /^\$\.?/, ""
 	else if base then path = d.join base, path
 	if /^\$/.test(path) then path = path.replace /^\$\.?/, "" # remove excess from base
 	return _.compact @_keysplit path
 
-# `d._keysplit()` takes a string and separates it by `sep`. You can use `sep` in the path by prefixing it with `avoid`.
+d.trim = (str, sep = ".") ->
+	len = sep.length
+	ss = () -> String.prototype.substr.apply str, arguments
+	while ss(0, len) is sep then str = ss len
+	while ss(-1 * len) is sep then str = ss 0, str.length - len
+	return str
+
+d._parts = (path) ->
+	ctx = @current
+	base = @trim (if ctx then ctx.path) or ""
+	return @split path, base
+
 d._keysplit = (str, sep = ".", avoid = "\\") ->
 	rawParts = str.split sep
 	parts = []
@@ -342,35 +302,26 @@ d._keysplit = (str, sep = ".", avoid = "\\") ->
 	
 	return parts
 
-# `d._deep()` gets or sets a `value` at `key` deeply within an object. When setting a `value` and `key` doesn't exist, objects are created to make it fit.
-d._deep = (obj, key, value) ->
-	keys = _.compact @_keysplit key
-	i = 0
-	n = keys.length
-
-	if arguments.length > 2 # set value
-		root = obj
-		n--
-		while i < n
-			key = keys[i++]
-			obj = obj[key] = (if _.isObject(obj[key]) then obj[key] else {})
-		obj[keys[i]] = value
-		value = root
-
-	else # get value
-		continue while (obj = obj[keys[i++]])? and i < n
-		value = (if i < n then undefined else obj)
-	
-	return value
-
-# `d._trim()` normalizes a path by removing any leading or trailing separators.
-d._trim = (str, sep = ".") ->
-	len = sep.length
-	ss = () -> String.prototype.substr.apply str, arguments
-	while ss(0, len) is sep then str = ss len
-	while ss(-1 * len) is sep then str = ss 0, str.length - len
-	return str
-
-# `d._isBackboneData()` tests `obj` as a Backbone model or collection. Useful in determining if data can take events or needs to be accessed in a different way.
 d._isBackboneData = (obj) ->
 	return _.isObject(obj) and (obj instanceof Backbone.Model or obj instanceof Backbone.Collection)
+
+d._complexToValue = (obj) ->
+	last = _.last(obj)
+	return unless last.subpath.length then last.data
+	else last.data.get d.join last.subpath
+
+d._eventParse = (str) ->
+	return unless m = /^([^:]+)(?:\:(.*))?$/.exec str
+	[event, name, attr] = m
+	attr ?= ""
+	return {event, name, attr}
+
+d._pathOrPart = (parts) ->
+	if _.isString(parts) then parts = d.split parts
+	return { path: d.join(parts), parts }
+
+# child means it has more subpaths than parent
+d._isChildOf = (parent, child, testSelf = false) ->
+	bool = "#{parent}." is child.substr 0, parent.length + 1
+	if testSelf then bool = bool or parent is child
+	return bool

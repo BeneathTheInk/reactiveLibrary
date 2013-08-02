@@ -1,8 +1,8 @@
-var Backbone = require("backbone"),
+var Backbone = require("backbone-deep-model"),
 	d = require("d");
 
 // Set some initial data
-t = new Backbone.Model();
+t = new Backbone.DeepModel();
 
 t.set("hello", {
 	deep: "value"
@@ -13,27 +13,29 @@ t.set("other", {
 });
 
 d.set("mymodel", t);
+d.set("test.asdf.qwer", 1234);
+console.log(d.model.toJSON());
+
+d.bind("change:mymodel", function() {
+	console.log(arguments);
+});
+//t.on("all", function(event) { console.log("mymodel", event); });
 
 // Set up a few reactive contexts
-dr = d.reactive(function() {
-	console.log("====dr====");
-	console.log(d("other.foo"));
-	return console.log("====/dr====");
-}, {
-	path: "mymodel"
-});
-
 r = d(function() {
 	console.log("\n====r====");
-	console.log(d("mymodel.hello.deep"));
-	dr();
+	console.log(d("test.asdf"));
+	d("mymodel", function() {
+		console.log("====dr====");
+		console.log(d("other.foo"));
+		return console.log("====/dr====");
+	});
 	return console.log("====/r====\n");
 });
 
 o = d(function() {
 	console.log("\n====o====");
 	console.log(d("_session.deep"));
-	dr();
 	return console.log("====/o====\n");
 });
 
@@ -41,6 +43,7 @@ o = d(function() {
 setTimeout(function() {
 	var model;
 	model = d.get("mymodel");
+	console.log(model);
 	model.set("other", {
 		foo: "notbar"
 	});
@@ -50,8 +53,9 @@ setTimeout(function() {
 	d.set("_session", {
 		deep: "test"
 	});
-	r.stop();
+	d.set("test.asdf.lol", "value");
 	return setTimeout(function() {
+		r.stop();
 		model.set("hello", {
 			deep: "thirdvalue"
 		});
