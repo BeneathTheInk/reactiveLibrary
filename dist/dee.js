@@ -32,11 +32,13 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
     rfn = function() {
       return rfn.run();
     };
+    rfn.id = _.uniqueId();
     rfn.path = options.path;
     _.extend(rfn, Backbone.Events);
     (reset = function() {
       return _.extend(rfn, {
         parent: null,
+        prevented: [],
         firstRun: true,
         running: false,
         stopped: true
@@ -62,10 +64,12 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
         this.trigger("start");
         this.firstRun = false;
       }
+      debug("started >", this.id);
       this.trigger("run:before");
       fn.call(rfn);
       this.trigger("run");
       this.trigger("run:after");
+      debug("finished >", this.id);
       self.current = old;
       return this.running = false;
     };
@@ -100,6 +104,17 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       this.on("stop", onstop);
       return this.on("run:before", onstop);
     };
+    rfn.prevent = function(path) {
+      if (!_.contains(this.prevented, path)) {
+        return this.prevented.push(path);
+      }
+    };
+    rfn.event = function(val, path, options) {
+      if (_.contains(this.prevented, path)) {
+        return;
+      }
+      return this.invalidate();
+    };
     rfn.subscribe = function(path, options) {
       var parts, _ref;
       if (options == null) {
@@ -107,7 +122,7 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       }
       _ref = d._pathOrPart(path), path = _ref.path, parts = _ref.parts;
       debug("subscribing >", path);
-      return d.bind("change:" + path, this.invalidate, this);
+      return d.bind("change:" + path, this.event, this);
     };
     rfn.unsubscribe = function(path, options) {
       var parts, _ref;
@@ -116,7 +131,7 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       }
       _ref = d._pathOrPart(path), path = _ref.path, parts = _ref.parts;
       debug("unsubscribing >", path);
-      return d.unbind("change:" + path, this.invalidate);
+      return d.unbind("change:" + path, this.event);
     };
     return rfn;
   };
@@ -202,7 +217,7 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
 
   d.event = function(path) {
     return function() {
-      var args, attr, event, fp, id, isBase, model, name, _ref;
+      var args, attr, event, fp, isBase, model, name, _ref;
       event = arguments[0], args = 2 <= arguments.length ? __slice.call(arguments, 1) : [];
       _ref = d._eventParse(event), event = _ref.event, name = _ref.name, attr = _ref.attr;
       if (attr.substr(-1) === "*") {
@@ -210,14 +225,27 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       }
       isBase = _.isEmpty(attr);
       fp = d.join(path, attr);
-      debug("event >", "" + name + ":" + fp);
-      d.trigger(fp, name, isBase);
-      if (name !== "change") {
-        d.trigger(fp, "change", true);
-        if (!((model = args[0]) && (id = model.id))) {
+      if (name === "change" && attr && this instanceof Backbone.Collection) {
+        if (!(model = args[0])) {
           return;
         }
-        return d.trigger(d.join(fp, id), "change", false);
+        fp = d.join(path, model.cid, attr);
+      }
+      debug("event >", "" + name + ":" + fp);
+      d.trigger(fp, name, {
+        isBase: isBase,
+        args: args
+      });
+      if (name !== "change") {
+        d.trigger(fp, "change", {
+          isBase: true
+        });
+        if (!(model = args[0])) {
+          return;
+        }
+        return d.trigger(d.join(fp, model.cid), "change", {
+          isBase: false
+        });
       }
     };
   };
@@ -267,10 +295,15 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
 
   d.off = d.unbind;
 
-  d.trigger = function(attr, name, isBase) {
+  _.extend(d, _.pick(Backbone.Events, "listenTo", "listenToOnce", "stopListening"));
+
+  d.trigger = function(attr, name, options) {
     var base, evts, execFns, parts, path, subpath, _ref, _ref1;
     if (name == null) {
       name = "change";
+    }
+    if (options == null) {
+      options = {};
     }
     if (_.isEmpty(parts = d.retrieve(d.split(attr), {
       complex: true
@@ -278,7 +311,11 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       return;
     }
     _ref = _.last(parts), subpath = _ref.subpath, path = _ref.path;
-    if (!isBase && _.isEmpty(subpath)) {
+    _.defaults(options, {
+      isBase: false,
+      args: []
+    });
+    if (!options.isBase && _.isEmpty(subpath)) {
       if (parts.length < 2) {
         return;
       }
@@ -290,22 +327,23 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
         return;
       }
       val = d.retrieve(d.split(path));
+      debug("exec > " + name + ":" + path);
       return _.each(subs, function(s) {
         var ctx;
         ctx = s.context || null;
-        return s.fn.call(ctx, val, attr);
+        return s.fn.call(ctx, val, attr, options);
       });
     };
     if (name === "change") {
-      if (isBase) {
+      if (options.isBase) {
         return _.each(d._paths, function(evts, p) {
-          if (p === attr.substr(0, p.length)) {
+          if (d._isChildOf(p, attr, true)) {
             return execFns(evts[name], p);
           }
         });
       } else {
         _.each(d._paths, function(evts, p) {
-          if (attr !== p && attr === p.substr(0, attr.length)) {
+          if (d._isChildOf(attr, p)) {
             return execFns(evts[name], p);
           }
         });
@@ -460,6 +498,18 @@ return (function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require
       path: d.join(parts),
       parts: parts
     };
+  };
+
+  d._isChildOf = function(parent, child, testSelf) {
+    var bool;
+    if (testSelf == null) {
+      testSelf = false;
+    }
+    bool = ("" + parent + ".") === child.substr(0, parent.length + 1);
+    if (testSelf) {
+      bool = bool || parent === child;
+    }
+    return bool;
   };
 
 }).call(this);

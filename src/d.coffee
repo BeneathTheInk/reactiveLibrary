@@ -17,11 +17,13 @@ d.reactive = (fn, options = {}) ->
 	# rfn or rfn.run must be called first
 	rfn = () -> rfn.run()
 
+	rfn.id = _.uniqueId()
 	rfn.path = options.path # base path
 	_.extend rfn, Backbone.Events
 	(reset = () ->
 		_.extend rfn,
 			parent: null
+			prevented: []
 			firstRun: true
 			running: false
 			stopped: true
@@ -41,12 +43,14 @@ d.reactive = (fn, options = {}) ->
 			@trigger "start"
 			@firstRun = false
 
+		debug "started >", @id
 		@trigger "run:before" # pre run
 
 		fn.call rfn # run
 
 		@trigger "run" # post run
 		@trigger "run:after"
+		debug "finished >", @id
 
 		self.current = old # reset the ctx
 		@running = false
@@ -77,15 +81,22 @@ d.reactive = (fn, options = {}) ->
 		@on "stop", onstop
 		@on "run:before", onstop
 
+	rfn.prevent = (path) ->
+		@prevented.push path unless _.contains @prevented, path
+
+	rfn.event = (val, path, options) ->
+		return if _.contains @prevented, path
+		@invalidate()
+
 	rfn.subscribe = (path, options = {}) ->
 		{path, parts} = d._pathOrPart path
 		debug "subscribing >", path
-		d.bind "change:#{path}", @invalidate, @
+		d.bind "change:#{path}", @event, @
 
 	rfn.unsubscribe = (path, options = {}) ->
 		{path, parts} = d._pathOrPart path
 		debug "unsubscribing >", path
-		d.unbind "change:#{path}", @invalidate
+		d.unbind "change:#{path}", @event
 
 	return rfn
 
@@ -150,14 +161,21 @@ d.event = (path) ->
 		return if attr.substr(-1) is "*" # ignore backbone deep dynamic paths
 		isBase = _.isEmpty attr # base means event was emitted without attr
 		fp = d.join path, attr
-		debug "event >", "#{name}:#{fp}"
-		d.trigger fp, name, isBase
 
-		# other events trigger change on the tree (mimic both isBases)
+		# fix event for collections
+		if name is "change" and attr and @ instanceof Backbone.Collection
+			return unless model = args[0]
+			fp = d.join path, model.cid, attr
+
+		# run event
+		debug "event >", "#{name}:#{fp}"
+		d.trigger fp, name, { isBase, args }
+
+		# other events trigger change on the tree, but only to children
 		if name isnt "change"
-			d.trigger fp, "change", true # always register change with parents
-			return unless (model = args[0]) and (id = model.id)
-			d.trigger d.join(fp, id), "change", false # only register lower events if we can
+			d.trigger fp, "change", { isBase: true } # always register change with parents
+			return unless model = args[0]
+			d.trigger d.join(fp, model.cid), "change", { isBase: false } # register lower events
 
 d.model.on "all", d.event ""
 d._paths = {}
@@ -177,34 +195,43 @@ d.unbind = (event, fn) ->
 	unless _.isFunction(fn) then delete evts[name]
 	else evts[name] = _.filter evts[name], (s) -> s.fn isnt fn
 
+# synonyms
 d.on = d.bind
 d.off = d.unbind
 
-d.trigger = (attr, name = "change", isBase) ->
+# add backbone listenTo methods
+_.extend d, _.pick Backbone.Events, "listenTo", "listenToOnce", "stopListening"
+
+d.trigger = (attr, name = "change", options = {}) ->
 	return if _.isEmpty parts = d.retrieve d.split(attr), complex: true
 	{subpath, path} = _.last parts
 
+	_.defaults options,
+		isBase: false
+		args: []
+
 	# isnt base, and empty subpath, get second to last
-	if !isBase and _.isEmpty(subpath)
+	if !options.isBase and _.isEmpty(subpath)
 		return if parts.length < 2 # something is very wrong here
 		{subpath, path} = _.first _.last parts, 2
 
 	execFns = (subs, path) ->
 		return unless _.isArray subs
 		val = d.retrieve d.split path
+		debug "exec > #{name}:#{path}"
 		_.each subs, (s) ->
 			ctx = s.context or null
-			s.fn.call ctx, val, attr
+			s.fn.call ctx, val, attr, options
 
 	if name is "change" # change event cause updates on most of the tree
-		if isBase # basic change event on an object (ie no subpath)
+		if options.isBase # basic change event on an object (ie no subpath)
 			# all parents including self
 			_.each d._paths, (evts, p) ->
-				execFns evts[name], p if p is attr.substr(0, p.length)
+				execFns evts[name], p if d._isChildOf p, attr, true
 		else
 			# all children, but not self
 			_.each d._paths, (evts, p) ->
-				execFns evts[name], p if attr isnt p and attr is p.substr(0, attr.length)
+				execFns evts[name], p if d._isChildOf attr, p
 
 			# all variations of subpath including self
 			base = d.join path
@@ -292,3 +319,9 @@ d._eventParse = (str) ->
 d._pathOrPart = (parts) ->
 	if _.isString(parts) then parts = d.split parts
 	return { path: d.join(parts), parts }
+
+# child means it has more subpaths than parent
+d._isChildOf = (parent, child, testSelf = false) ->
+	bool = "#{parent}." is child.substr 0, parent.length + 1
+	if testSelf then bool = bool or parent is child
+	return bool
