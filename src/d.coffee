@@ -6,10 +6,15 @@ _ = require "underscore"
 d = () -> d.run.apply d, arguments
 module.exports = d
 
-debug = () -> if d.debug then console.log.apply console, arguments
-
-d.model = new Backbone.DeepModel
+# dev helpers
 # d.debug = true
+debug = () -> if d.debug then console.log.apply console, arguments
+timer = () ->
+	t = new Date
+	-> new Date - t
+
+# data
+d.model = new Backbone.DeepModel
 
 d.reactive = (fn, options = {}) ->
 	self = this
@@ -43,14 +48,15 @@ d.reactive = (fn, options = {}) ->
 			@trigger "start"
 			@firstRun = false
 
-		debug "started >", @id
+		t = timer()
+		debug "context started >", @id
 		@trigger "run:before" # pre run
 
 		fn.call rfn # run
 
 		@trigger "run" # post run
 		@trigger "run:after"
-		debug "finished >", @id
+		debug "context finished >", @id, t()
 
 		self.current = old # reset the ctx
 		@running = false
@@ -110,7 +116,7 @@ d.get = (path, options = {}) ->
 		ctx.subscribe path, options
 		ctx.cleanup () -> ctx.unsubscribe path, options
 
-	return val
+	return if val? then val else options.default
 
 d.retrieve = (parts, options = {}) ->
 	{parts} = d._pathOrPart parts
@@ -163,19 +169,27 @@ d.event = (path) ->
 		fp = d.join path, attr
 
 		# fix event for collections
-		if name is "change" and attr and @ instanceof Backbone.Collection
-			return unless model = args[0]
-			fp = d.join path, model.cid, attr
+		if @ instanceof Backbone.Collection
+			if name is "change" and attr
+				return unless model = args[0]
+				fp = d.join path, model.cid, attr
+				dp = d.join path, "*", attr # dynamic path
+			else
+				dp = d.join path, "*" # dynamic path
 
 		# run event
-		debug "event >", "#{name}:#{fp}"
+		t = timer()
+		debug "event start >", "#{name}:#{fp}"
 		d.trigger fp, name, { isBase, args }
+		d.exec "change", dp, { isBase, args } if dp
 
 		# other events trigger change on the tree, but only to children
-		if name isnt "change"
+		if _.contains [ "add", "remove", "reset", "sync", "sort" ], name
 			d.trigger fp, "change", { isBase: true } # always register change with parents
 			return unless model = args[0]
 			d.trigger d.join(fp, model.cid), "change", { isBase: false } # register lower events
+
+		debug "event end >", "#{name}:#{fp}", t()
 
 d.model.on "all", d.event ""
 d._paths = {}
@@ -201,12 +215,16 @@ d.once = (event, fn) ->
 		fn.call @, arguments
 	d.bind event, cb
 
-# synonyms
-d.on = d.bind
-d.off = d.unbind
-
-# add backbone listenTo methods
-_.extend d, _.pick Backbone.Events, "listenTo", "listenToOnce", "stopListening"
+d.exec = (event, attr, options) ->
+	t = timer()
+	return unless _.isObject evts = d._paths[attr]
+	return unless _.isArray subs = evts[event]
+	val = d.retrieve d.split attr
+	path = options.path or attr
+	_.each subs, (s) ->
+		ctx = s.context or null
+		s.fn.call ctx, val, path, options
+	debug "exec > #{event}:#{attr} (x#{subs.length})", t()
 
 d.trigger = (attr, name = "change", options = {}) ->
 	return if _.isEmpty parts = d.retrieve d.split(attr), complex: true
@@ -215,40 +233,40 @@ d.trigger = (attr, name = "change", options = {}) ->
 	_.defaults options,
 		isBase: false
 		args: []
+		path: attr
+
+	exec = (name, path) ->
+		d.exec name, path, options
 
 	# isnt base, and empty subpath, get second to last
 	if !options.isBase and _.isEmpty(subpath)
 		return if parts.length < 2 # something is very wrong here
 		{subpath, path} = _.first _.last parts, 2
 
-	execFns = (subs, path) ->
-		return unless _.isArray subs
-		val = d.retrieve d.split path
-		debug "exec > #{name}:#{path}"
-		_.each subs, (s) ->
-			ctx = s.context or null
-			s.fn.call ctx, val, attr, options
-
 	if name is "change" # change event cause updates on most of the tree
 		if options.isBase # basic change event on an object (ie no subpath)
 			# all parents including self
 			_.each d._paths, (evts, p) ->
-				execFns evts[name], p if d._isChildOf p, attr, true
+				exec name, p if d._isChildOf p, attr, true
 		else
 			# all children, but not self
 			_.each d._paths, (evts, p) ->
-				execFns evts[name], p if d._isChildOf attr, p
+				exec name, p if d._isChildOf attr, p
 
 			# all variations of subpath including self
 			base = d.join path
 			_.each subpath, (p) ->
 				base = d.join base, p
-				return unless _.isObject evts = d._paths[base]
-				execFns evts[name], base
+				exec name, base
 					
 	else # these events do not
 		return unless _.isObject evts = d._paths[attr]
-		execFns evts[name], attr
+		exec name, attr
+
+# synonyms
+d.on = d.bind
+d.off = d.unbind
+d.emit = d.trigger
 
 d.run = (path, fn, options) ->
 	if _.isObject(fn) and !_.isFunction(fn) and !options then [options, fn] = [fn, null]
