@@ -1,6 +1,12 @@
 {
 	"name": "dee",
+	"description": "Dee is a reactive library that makes changing Backbone data easy to deal with.",
 	"version": "0.3.3",
+	"keywords": [
+		"backbone",
+		"reactive"
+	],
+	"license": "MIT",
 	"scripts": {
 		"test": "node ./test/server"
 	},
