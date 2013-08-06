@@ -184,10 +184,10 @@ d.event = (path) ->
 		d.exec "change", dp, { isBase, args } if dp
 
 		# other events trigger change on the tree, but only to children
-		if _.contains [ "add", "remove", "reset", "sync", "sort" ], name
+		if _.contains [ "add", "remove", "reset", "sort" ], name
 			d.trigger fp, "change", { isBase: true } # always register change with parents
-			return unless model = args[0]
-			d.trigger d.join(fp, model.cid), "change", { isBase: false } # register lower events
+			return unless (model = args[0]) instanceof Backbone.Model
+			d.trigger d.join(fp, model.cid), "change", { isBase: false } 
 
 		debug "event end >", "#{name}:#{fp}", t()
 
@@ -207,7 +207,9 @@ d.unbind = (event, fn) ->
 	{event, name, attr} = d._eventParse event
 	return unless _.isObject evts = d._paths[attr]
 	unless _.isFunction(fn) then delete evts[name]
-	else evts[name] = _.filter evts[name], (s) -> s.fn isnt fn
+	else
+		evts[name] = _.filter evts[name], (s) -> s.fn isnt fn
+		delete evts[name] if _.isEmpty evts[name]
 
 d.once = (event, fn) ->
 	cb = _.once ->
